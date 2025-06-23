@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>DINO RUNNER 1984</title>
+  <style>
+    body {
+      font-family: 'Courier New', Courier, monospace;
+      background-color: black;
+      color: #00ff00;
+      margin: 0;
+      overflow: hidden;
+    }
+    #ascii-title {
+      position: absolute;
+      top: 200px;
+      width: 100%;
+      text-align: center;
+      white-space: pre;
+      font-size: 12px;
+      color: #00ff00;
+    }
+    #press-start {
+      position: absolute;
+      top: 370px;
+      width: 100%;
+      text-align: center;
+      font-size: 20px;
+      color: #00ff00;
+      animation: glow 2s ease-in-out infinite;
+    }
+    @keyframes glow {
+      0%, 100% { text-shadow: 0 0 10px #00ff00; color: #00ff00; }
+      50% { text-shadow: 0 0 20px #00ff00; color: #b6ffb6; }
+    }
+    #name-input, #save-button {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Courier New', Courier, monospace;
+  background-color: black;
+  color: #00ff00;
+  border: none;
+}
+
+#name-input {
+  top: 400px; /* було 300px — тепер нижче */
+  font-size: 20px;
+  padding: 5px;
+  text-align: center;
+}
+
+#save-button {
+  top: 590px; /* було 340px — тепер нижче */
+  font-size: 18px;
+  padding: 5px 10px;
+  cursor: pointer;
+  animation: glow 2s ease-in-out infinite;
+}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+</head>
+<body>
+<div id="ascii-title">
+  ____  _____   ______     ____  __  ___   __   ________    __  ______<br>
+ / __ \/  _/ | / / __ \   / __ \/ / / / | / /  / ____/ /   / / / / __ )<br>
+/ / / // //  |/ / / / /  / /_/ / / / /  |/ /  / /   / /   / / / / __  |<br>
+/ /_/ // // /|  / /_/ /  / _, _/ /_/ / /|  /  / /___/ /___/ /_/ / /_/ /<br>
+\____/___/_/ |_/\____/  /_/ |_|\____/_/ |_/   \____/_____/\____/_____/  
+</div>
+  <div id="press-start">PRESS START</div>
+
+<script>
+const config = {
+  type: Phaser.AUTO,
+  width: window.innerWidth,
+  height: window.innerHeight,
+  backgroundColor: '#000000',
+  physics: {
+    default: 'arcade',
+    arcade: {
+      gravity: { y: 1400 },
+      debug: false
+    }
+  },
+  scene: {
+    preload,
+    create,
+    update
+  }
+};
+
+const game = new Phaser.Game(config);
+
+let dino, cursors, obstacles, score = 0, scoreText, leaderboardText;
+let gameOver = false, gameStarted = false;
+let groundY, ground, graphics, gameSpeed = 400, invisibleZones = [];
+let nameInput, saveButton;
+let sceneRef;
+
+function preload() {
+  this.load.image('dino', 'https://i.imgur.com/bT1NnUz.png');
+  this.load.image('ground', 'https://i.imgur.com/q3FQWbF.png');
+  this.load.image('cactus', 'https://i.imgur.com/JpUq9D3.png');
+}
+
+function create() {
+  sceneRef = this;
+  groundY = config.height - 40;
+
+  ground = this.add.tileSprite(config.width / 2, groundY + 20, config.width * 2, 40, 'ground');
+  this.physics.add.existing(ground, true);
+
+  graphics = this.add.graphics();
+
+  dino = this.physics.add.sprite(100, groundY, 'dino');
+  dino.setOrigin(0.5, 1);
+  dino.setCollideWorldBounds(true);
+  dino.body.allowGravity = false;
+  this.physics.add.collider(dino, ground);
+
+  cursors = this.input.keyboard.createCursorKeys();
+
+  obstacles = this.physics.add.group();
+  this.physics.add.collider(obstacles, ground);
+  this.physics.add.collider(dino, obstacles, () => {
+    if (!gameOver) endGame(this);
+  });
+
+  scoreText = this.add.text(16, 16, 'SCORE: 0', {
+    fontSize: '20px', fill: '#00ff00', fontFamily: 'Courier New'
+  });
+
+  leaderboardText = this.add.text(config.width / 2, 200, '', {
+  fontSize: '24px', fill: '#00ff00', fontFamily: 'Courier New', align: 'center'
+}).setOrigin(0.5);
+
+  scoreText.setVisible(false);
+  leaderboardText.setVisible(false);
+
+  this.input.keyboard.on('keydown-SPACE', () => {
+    if (!gameStarted) {
+      document.getElementById('ascii-title')?.remove();
+      document.getElementById('press-start')?.remove();
+      scoreText.setVisible(true);
+      startGame(sceneRef);
+    }
+  });
+}
+
+function update() {
+  if (!gameStarted || gameOver) return;
+
+  if ((cursors.space.isDown || cursors.up.isDown) && dino.body.touching.down) {
+    dino.setVelocityY(-500);
+  }
+
+  if (dino.y > config.height) endGame(this);
+
+  obstacles.getChildren().forEach((obstacle) => {
+    if (obstacle.x < -50) obstacles.remove(obstacle, true, true);
+    if (!obstacle.passed && obstacle.x + obstacle.displayWidth / 2 < dino.x - dino.displayWidth / 2) {
+      obstacle.passed = true;
+      score += 1;
+      scoreText.setText('SCORE: ' + score);
+      if (score % 10 === 0) gameSpeed += 50;
+    }
+  });
+
+  invisibleZones.forEach(zone => {
+    if (dino.x > zone.x && dino.x < zone.x + zone.width && dino.body.touching.down) {
+      endGame(this);
+    }
+  });
+
+  ground.tilePositionX += gameSpeed / 100;
+}
+
+function addObstacle() {
+  const scale = 0.5 * Phaser.Math.RND.pick([1, 2, 3]);
+  const cactus = obstacles.create(config.width + 50, 0, 'cactus');
+  cactus.setScale(scale).setOrigin(0.5, 1);
+  cactus.setVelocityX(-gameSpeed).setImmovable(true);
+  cactus.body.allowGravity = false;
+  cactus.y = groundY;
+  cactus.passed = false;
+}
+
+function addPit() {
+  const pitWidth = Phaser.Math.Between(100, 200);
+  const pitX = config.width + 50;
+  invisibleZones.push({ x: pitX, width: pitWidth });
+  graphics.fillStyle(0xff0000, 1);
+  graphics.fillRect(pitX, groundY + 20, pitWidth, 40);
+}
+
+function scheduleNextObstacle(scene) {
+  const delay = Phaser.Math.Between(500, 1000);
+  scene.time.delayedCall(delay, () => {
+    if (!gameOver && gameStarted) {
+      Phaser.Math.Between(0, 1) === 0 ? addPit() : addObstacle();
+      scheduleNextObstacle(scene);
+    }
+  });
+}
+
+function startGame(scene) {
+  gameStarted = true;
+  gameOver = false;
+  score = 0;
+  gameSpeed = 400;
+  scoreText.setText('SCORE: 0');
+  dino.setTint(0xffffff);
+  dino.body.allowGravity = true;
+  dino.setVelocity(0, 0);
+  dino.setPosition(100, groundY);
+  obstacles.clear(true, true);
+  invisibleZones = [];
+  graphics.clear();
+  leaderboardText.setVisible(false);
+  scene.physics.resume();
+  scheduleNextObstacle(scene);
+}
+
+function endGame(scene) {
+  gameOver = true;
+  scene.physics.pause();
+  dino.setTint(0xff0000);
+  displayLeaderboard();
+  showNameInput(scene);
+}
+
+function showNameInput(scene) {
+  nameInput = document.createElement('input');
+  nameInput.id = 'name-input';
+  nameInput.type = 'text';
+  nameInput.placeholder = 'ENTER NAME';
+  nameInput.maxLength = 12;
+  document.body.appendChild(nameInput);
+
+  saveButton = document.createElement('button');
+  saveButton.id = 'save-button';
+  saveButton.innerText = 'SAVE SCORE';
+  document.body.appendChild(saveButton);
+
+  saveButton.onclick = () => {
+    const playerName = nameInput.value.trim() || 'NO NAME';
+    saveScore(playerName, score);
+    document.body.removeChild(nameInput);
+    document.body.removeChild(saveButton);
+    setTimeout(() => location.reload(), 2000);
+  };
+}
+
+function saveScore(name, score) {
+  const leaderboard = JSON.parse(localStorage.getItem('dinoLeaderboard')) || [];
+  leaderboard.push({ name, score });
+  leaderboard.sort((a, b) => b.score - a.score);
+  const top10 = leaderboard.slice(0, 10);
+  localStorage.setItem('dinoLeaderboard', JSON.stringify(top10));
+}
+
+function displayLeaderboard() {
+  const leaderboard = JSON.parse(localStorage.getItem('dinoLeaderboard')) || [];
+  let text = 'HIGH SCORES:\n\n';
+  leaderboard.forEach((entry, i) => {
+    text += `${i + 1}. ${entry.name.toUpperCase()} — ${entry.score}\n`;
+  });
+  leaderboardText.setText(text);
+  leaderboardText.setVisible(true);
+}
+</script>
+</body>
+</html>
