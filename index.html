@@ -29,11 +29,13 @@
       color: #00ff00;
       animation: glow 2s ease-in-out infinite;
     }
+
     @keyframes glow {
       0%, 100% { text-shadow: 0 0 10px #00ff00; color: #00ff00; }
       50% { text-shadow: 0 0 20px #00ff00; color: #b6ffb6; }
     }
-    #name-input, #save-button {
+
+  #name-input, #save-button {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
@@ -45,30 +47,54 @@
 
 #name-input {
   top: 400px; /* було 300px — тепер нижче */
+  outline: none; 
   font-size: 20px;
   padding: 5px;
   text-align: center;
 }
 
 #save-button {
-  top: 590px; /* було 340px — тепер нижче */
+  top: 440px; /* було 340px — тепер нижче */
   font-size: 18px;
   padding: 5px 10px;
   cursor: pointer;
   animation: glow 2s ease-in-out infinite;
 }
+
+#game-over-title {
+  position: absolute;
+  top: 320px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 20px;
+  color: #00ff00;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+#matrix-message {
+  position: absolute;
+  top: 340px; /* було 320px — нижче під ascii */
+  width: 100%;
+  text-align: center;
+  font-size: 20px;
+  font-family: 'Courier New', Courier, monospace;
+  color: #00ff00;
+  white-space: pre-wrap;
+}
+
   </style>
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
 </head>
 <body>
 <div id="ascii-title">
-  ____  _____   ______     ____  __  ___   __   ________    __  ______<br>
- / __ \/  _/ | / / __ \   / __ \/ / / / | / /  / ____/ /   / / / / __ )<br>
-/ / / // //  |/ / / / /  / /_/ / / / /  |/ /  / /   / /   / / / / __  |<br>
-/ /_/ // // /|  / /_/ /  / _, _/ /_/ / /|  /  / /___/ /___/ /_/ / /_/ /<br>
-\____/___/_/ |_/\____/  /_/ |_|\____/_/ |_/   \____/_____/\____/_____/  
+░   ░░░  ░░░      ░░░░░░░░░        ░░   ░░░  ░░        ░░        ░░       ░░░   ░░░  ░░        ░░        ░
+▒    ▒▒  ▒▒  ▒▒▒▒  ▒▒▒▒▒▒▒▒▒▒▒  ▒▒▒▒▒    ▒▒  ▒▒▒▒▒  ▒▒▒▒▒  ▒▒▒▒▒▒▒▒  ▒▒▒▒  ▒▒    ▒▒  ▒▒  ▒▒▒▒▒▒▒▒▒▒▒  ▒▒▒▒
+▓  ▓  ▓  ▓▓  ▓▓▓▓  ▓▓▓▓▓▓▓▓▓▓▓  ▓▓▓▓▓  ▓  ▓  ▓▓▓▓▓  ▓▓▓▓▓      ▓▓▓▓       ▓▓▓  ▓  ▓  ▓▓      ▓▓▓▓▓▓▓  ▓▓▓▓
+█  ██    ██  ████  ███████████  █████  ██    █████  █████  ████████  ███  ███  ██    ██  ███████████  ████
+█  ███   ███      █████████        ██  ███   █████  █████        ██  ████  ██  ███   ██        █████  ████
+                                                                                                                                                                                                                                                              
 </div>
-  <div id="press-start">PRESS START</div>
+  <div id="matrix-message"></div>
 
 <script>
 const config = {
@@ -79,7 +105,7 @@ const config = {
   physics: {
     default: 'arcade',
     arcade: {
-      gravity: { y: 1400 },
+      gravity: { y: 3500 },
       debug: false
     }
   },
@@ -92,20 +118,27 @@ const config = {
 
 const game = new Phaser.Game(config);
 
+let currentScreen = 'start';
 let dino, cursors, obstacles, score = 0, scoreText, leaderboardText;
 let gameOver = false, gameStarted = false;
 let groundY, ground, graphics, gameSpeed = 400, invisibleZones = [];
 let nameInput, saveButton;
 let sceneRef;
+let elapsedTime = 0;
+let slowBonusGroup;
+let slowMotionActive = false;
 
 function preload() {
-  this.load.image('dino', 'https://i.imgur.com/bT1NnUz.png');
+  this.load.audio('jump', 'jump.wav');
+  this.load.atlas('dino', 'dino_atlas.png', 'dino_atlas.json');
+  this.load.atlas('smoking_dino', 'smoking_dino.png', 'smoking_dino.json');
   this.load.image('ground', 'https://i.imgur.com/q3FQWbF.png');
   this.load.image('cactus', 'https://i.imgur.com/JpUq9D3.png');
 }
 
 function create() {
   sceneRef = this;
+  this.jumpSound = this.sound.add('jump');
   groundY = config.height - 40;
 
   ground = this.add.tileSprite(config.width / 2, groundY + 20, config.width * 2, 40, 'ground');
@@ -113,58 +146,98 @@ function create() {
 
   graphics = this.add.graphics();
 
-  dino = this.physics.add.sprite(100, groundY, 'dino');
-  dino.setOrigin(0.5, 1);
-  dino.setCollideWorldBounds(true);
-  dino.body.allowGravity = false;
-  this.physics.add.collider(dino, ground);
+  this.anims.create({
+    key: 'run',
+    frames: [
+      { key: 'dino', frame: 'Sprite-0002 0.' },
+      { key: 'dino', frame: 'Sprite-0002 1.' },
+      { key: 'dino', frame: 'Sprite-0002 2.' },
+      { key: 'dino', frame: 'Sprite-0002 3.' },
+      { key: 'dino', frame: 'Sprite-0002 4.' },
+      { key: 'dino', frame: 'Sprite-0002 5.' },
+      { key: 'dino', frame: 'Sprite-0002 6.' },
+      { key: 'dino', frame: 'Sprite-0002 7.' },
+      { key: 'dino', frame: 'Sprite-0002 8.' }
+    ],
+    frameRate: 10,
+    repeat: -1
+  });
+
+  this.anims.create({
+    key: 'smoke',
+    frames: [
+      { key: 'smoking_dino', frame: 'Sprite-0002 0.' },
+      { key: 'smoking_dino', frame: 'Sprite-0002 1.' },
+      { key: 'smoking_dino', frame: 'Sprite-0002 2.' },
+      { key: 'smoking_dino', frame: 'Sprite-0002 3.' },
+      { key: 'smoking_dino', frame: 'Sprite-0002 4.' },
+      { key: 'smoking_dino', frame: 'Sprite-0002 5.' }
+    ],
+    frameRate: 6,
+    repeat: -1
+  });
+
+  startDino = this.add.sprite(100, groundY, 'smoking_dino', 'Sprite-0002 0.');
+  startDino.setScale(0.5);
+  startDino.setOrigin(0.5, 1);
+  startDino.play('smoke');
 
   cursors = this.input.keyboard.createCursorKeys();
 
   obstacles = this.physics.add.group();
-  this.physics.add.collider(obstacles, ground);
-  this.physics.add.collider(dino, obstacles, () => {
-    if (!gameOver) endGame(this);
-  });
 
   scoreText = this.add.text(16, 16, 'SCORE: 0', {
     fontSize: '20px', fill: '#00ff00', fontFamily: 'Courier New'
   });
 
-  leaderboardText = this.add.text(config.width / 2, 200, '', {
-  fontSize: '24px', fill: '#00ff00', fontFamily: 'Courier New', align: 'center'
+  leaderboardText = this.add.text(config.width / 2, 300, '', {
+  fontSize: '20px', fill: '#00ff00', fontFamily: 'Courier New', align: 'center'
 }).setOrigin(0.5);
 
   scoreText.setVisible(false);
   leaderboardText.setVisible(false);
 
-  this.input.keyboard.on('keydown-SPACE', () => {
-    if (!gameStarted) {
-      document.getElementById('ascii-title')?.remove();
-      document.getElementById('press-start')?.remove();
-      scoreText.setVisible(true);
-      startGame(sceneRef);
+    this.input.keyboard.on('keydown-SPACE', () => {
+    if (currentScreen === 'start') {
+    document.getElementById('ascii-title')?.remove();
+    document.getElementById('matrix-message')?.remove();
+    scoreText.setVisible(true);
+    startGame(sceneRef);
+  } else if (currentScreen === 'input') {
+    // якщо введено імʼя — зберігаємо
+    if (nameInput && nameInput.value.trim().length > 0) {
+      handleSaveScore();
     }
-  });
+  } else if (currentScreen === 'leaderboard') {
+    location.reload(); // оновити гру для старту
+  }
+});
+
 }
 
 function update() {
+  if (!gameOver && gameStarted) {
+  elapsedTime += 1 / 60; // якщо ~60 fps
+  score = Math.floor(elapsedTime * 10); // 10 очок за секунду
+  scoreText.setText('SCORE: ' + score);
+}
   if (!gameStarted || gameOver) return;
+  if (!gameStarted || gameOver || !dino.body.touching.down) {
+  dino.anims.stop();
+  dino.setFrame('Sprite-0002 0.');
+} else if (!dino.anims.isPlaying) {
+  dino.play('run');
+}
 
-  if ((cursors.space.isDown || cursors.up.isDown) && dino.body.touching.down) {
-    dino.setVelocityY(-500);
-  }
-
+if ((cursors.space.isDown || cursors.up.isDown) && dino.body.touching.down) {
+  dino.setVelocityY(-1100);
+  this.jumpSound.play();
+}
   if (dino.y > config.height) endGame(this);
 
   obstacles.getChildren().forEach((obstacle) => {
+      obstacle.setVelocityX(-gameSpeed);
     if (obstacle.x < -50) obstacles.remove(obstacle, true, true);
-    if (!obstacle.passed && obstacle.x + obstacle.displayWidth / 2 < dino.x - dino.displayWidth / 2) {
-      obstacle.passed = true;
-      score += 1;
-      scoreText.setText('SCORE: ' + score);
-      if (score % 10 === 0) gameSpeed += 50;
-    }
   });
 
   invisibleZones.forEach(zone => {
@@ -173,11 +246,12 @@ function update() {
     }
   });
 
-  ground.tilePositionX += gameSpeed / 100;
+const groundScrollSpeed = -gameSpeed;
+ground.tilePositionX += -groundScrollSpeed * (1 / 60); // приблизно 60 FPS
 }
 
 function addObstacle() {
-  const scale = 0.5 * Phaser.Math.RND.pick([1, 2, 3]);
+  const scale = 0.5 * Phaser.Math.RND.pick([2, 3]);
   const cactus = obstacles.create(config.width + 50, 0, 'cactus');
   cactus.setScale(scale).setOrigin(0.5, 1);
   cactus.setVelocityX(-gameSpeed).setImmovable(true);
@@ -205,51 +279,99 @@ function scheduleNextObstacle(scene) {
 }
 
 function startGame(scene) {
+  if (startDino) startDino.destroy();
   gameStarted = true;
+  currentScreen = 'game';
   gameOver = false;
   score = 0;
+  elapsedTime = 0;
   gameSpeed = 400;
   scoreText.setText('SCORE: 0');
+  leaderboardText.setVisible(false);
+  obstacles.clear(true, true);
+  invisibleZones = [];
+  graphics.clear();
+
+  dino = scene.physics.add.sprite(100, groundY, 'dino', 'Sprite-0002 0.');
+dino.setScale(0.5);
+dino.setOrigin(0.5, 1);
+dino.body.setSize(dino.width * 0.6, dino.height);
+dino.play('run');
+
+scene.physics.add.collider(dino, ground); // ← Додай оце
+scene.physics.add.collider(dino, obstacles, () => {
+  if (!gameOver) endGame(scene);
+});
+  scene.physics.add.collider(dino, obstacles, () => {
+    if (!gameOver) endGame(scene);
+  });
+
   dino.setTint(0xffffff);
   dino.body.allowGravity = true;
   dino.setVelocity(0, 0);
   dino.setPosition(100, groundY);
-  obstacles.clear(true, true);
-  invisibleZones = [];
-  graphics.clear();
-  leaderboardText.setVisible(false);
+
   scene.physics.resume();
   scheduleNextObstacle(scene);
 }
 
 function endGame(scene) {
   gameOver = true;
+  currentScreen = 'input';
   scene.physics.pause();
   dino.setTint(0xff0000);
-  displayLeaderboard();
-  showNameInput(scene);
+  // displayLeaderboard(); // ← ❌ прибираємо з цієї сцени
+  showNameInput(scene);    // ← ✅ залишаємо тільки поле вводу
 }
 
 function showNameInput(scene) {
+  const gameOverTitle = document.createElement('div');
+  gameOverTitle.id = 'game-over-title';
+  gameOverTitle.innerText = 'GAME OVER';
+  document.body.appendChild(gameOverTitle);
   nameInput = document.createElement('input');
+  nameInput.setAttribute('autocomplete', 'off');
   nameInput.id = 'name-input';
   nameInput.type = 'text';
   nameInput.placeholder = 'ENTER NAME';
   nameInput.maxLength = 12;
-  document.body.appendChild(nameInput);
+  nameInput.autofocus = false;
+  nameInput.style.caretColor = '#00ff00';
 
   saveButton = document.createElement('button');
   saveButton.id = 'save-button';
-  saveButton.innerText = 'SAVE SCORE';
+  //saveButton.innerText = 'SAVE SCORE';//
+
+  document.body.appendChild(nameInput);
   document.body.appendChild(saveButton);
 
+  nameInput.focus();
+
+  // При натисканні Enter у полі — збереження
+  nameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      handleSaveScore();
+    }
+  });
+
+  // При натисканні кнопки — збереження
   saveButton.onclick = () => {
-    const playerName = nameInput.value.trim() || 'NO NAME';
-    saveScore(playerName, score);
-    document.body.removeChild(nameInput);
-    document.body.removeChild(saveButton);
-    setTimeout(() => location.reload(), 2000);
+    handleSaveScore();
   };
+}
+
+function handleSaveScore() {
+  const playerName = nameInput.value.trim() || 'NO NAME';
+  saveScore(playerName, score);
+
+  const title = document.getElementById('game-over-title');
+if (title) document.body.removeChild(title);
+
+  document.body.removeChild(nameInput);
+  document.body.removeChild(saveButton);
+
+  currentScreen = 'leaderboard';
+  displayLeaderboard();
 }
 
 function saveScore(name, score) {
@@ -269,6 +391,39 @@ function displayLeaderboard() {
   leaderboardText.setText(text);
   leaderboardText.setVisible(true);
 }
+
+const matrixLines = [
+  "Wake up, Dino...",
+  "K41 has you..."
+];
+
+function typeMatrixText(lines, elementId, delay = 100) {
+  const el = document.getElementById(elementId);
+  let line = 0, char = 0;
+  let currentText = "";
+
+  function type() {
+    if (line >= lines.length) return;
+    currentText += lines[line][char];
+    el.innerText = currentText + "_";
+    char++;
+    if (char < lines[line].length) {
+      setTimeout(type, delay);
+    } else {
+      currentText += "\n";
+      char = 0;
+      line++;
+      setTimeout(type, delay * 4); // пауза між рядками
+    }
+  }
+
+  type();
+}
+
+// Запускаємо після завантаження DOM
+window.addEventListener('DOMContentLoaded', () => {
+  typeMatrixText(matrixLines, 'matrix-message');
+});
 </script>
 </body>
 </html>
