@@ -83,17 +83,11 @@
 }
 
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+  <script src="phaser.min.js"></script>
+  <!-- <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script> -->
 </head>
 <body>
-<div id="ascii-title">
-░   ░░░  ░░░      ░░░░░░░░░        ░░   ░░░  ░░        ░░        ░░       ░░░   ░░░  ░░        ░░        ░
-▒    ▒▒  ▒▒  ▒▒▒▒  ▒▒▒▒▒▒▒▒▒▒▒  ▒▒▒▒▒    ▒▒  ▒▒▒▒▒  ▒▒▒▒▒  ▒▒▒▒▒▒▒▒  ▒▒▒▒  ▒▒    ▒▒  ▒▒  ▒▒▒▒▒▒▒▒▒▒▒  ▒▒▒▒
-▓  ▓  ▓  ▓▓  ▓▓▓▓  ▓▓▓▓▓▓▓▓▓▓▓  ▓▓▓▓▓  ▓  ▓  ▓▓▓▓▓  ▓▓▓▓▓      ▓▓▓▓       ▓▓▓  ▓  ▓  ▓▓      ▓▓▓▓▓▓▓  ▓▓▓▓
-█  ██    ██  ████  ███████████  █████  ██    █████  █████  ████████  ███  ███  ██    ██  ███████████  ████
-█  ███   ███      █████████        ██  ███   █████  █████        ██  ████  ██  ███   ██        █████  ████
-                                                                                                                                                                                                                                                              
-</div>
+
   <div id="matrix-message"></div>
 
 <script>
@@ -199,7 +193,6 @@ function create() {
 
     this.input.keyboard.on('keydown-SPACE', () => {
     if (currentScreen === 'start') {
-    document.getElementById('ascii-title')?.remove();
     document.getElementById('matrix-message')?.remove();
     scoreText.setVisible(true);
     startGame(sceneRef);
@@ -299,9 +292,6 @@ dino.body.setSize(dino.width * 0.6, dino.height);
 dino.play('run');
 
 scene.physics.add.collider(dino, ground); // ← Додай оце
-scene.physics.add.collider(dino, obstacles, () => {
-  if (!gameOver) endGame(scene);
-});
   scene.physics.add.collider(dino, obstacles, () => {
     if (!gameOver) endGame(scene);
   });
